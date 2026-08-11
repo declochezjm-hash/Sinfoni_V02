@@ -1,0 +1,2 @@
+-- Exécuter le contenu du fichier :
+-- supabase/migrations/20260704230000_fix_tickets_rls_role_fallback.sql

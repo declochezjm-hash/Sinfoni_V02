@@ -1,0 +1,23 @@
+version: '3.8'
+
+services:
+  sinfoni-app:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: sinfoni_frontend
+    ports:
+      - "4301:4301"
+    volumes:
+      - .:/app
+      - /app/node_modules
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      - NODE_ENV=development
+      - VITE_SUPABASE_URL=/supabase
+      - VITE_SUPABASE_PROXY_TARGET=http://host.docker.internal:54321
+      - VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0
+      - VITE_DEFAULT_ORGANIZATION_ID=00000000-0000-0000-0000-000000000001
+    # Ne pas redémarrer automatiquement : préférer `npm run dev` sur le host :4301
+    restart: "no"

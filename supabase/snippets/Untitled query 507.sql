@@ -1,0 +1,1 @@
+supabase/migrations/20260704250000_repair_modules_rls_views.sql

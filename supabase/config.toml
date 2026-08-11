@@ -1,0 +1,33 @@
+# Config Supabase locale — API PostgREST
+# Les tables vivent dans `app`, l'API n'expose que `public` (vues).
+#
+# Ports hôtes décalés (1543x) : Windows Hyper-V réserve souvent 54279–54378
+# (ce qui bloque les ports par défaut 54321–54327).
+
+project_id = "Sinfoni"
+
+[api]
+enabled = true
+port = 15431
+schemas = ["public", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+port = 15432
+major_version = 17
+
+[db.seed]
+enabled = true
+sql_paths = ["./seed.sql"]
+
+[studio]
+enabled = true
+port = 15433
+
+[inbucket]
+enabled = true
+port = 15434
+
+[analytics]
+enabled = false

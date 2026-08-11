@@ -1,0 +1,104 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  body {
+    font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    color: #1e293b;
+  }
+}
+
+@keyframes energy-marker-pulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.45;
+    transform: scale(1.12);
+  }
+}
+
+.energy-marker-broken {
+  animation: energy-marker-pulse 1s ease-in-out infinite;
+}
+
+.energy-marker-editing {
+  animation: energy-marker-editing-pulse 1.2s ease-in-out infinite;
+}
+
+.energy-marker-creation {
+  animation: energy-marker-creation-pop 0.45s ease-out, energy-marker-editing-pulse 1.2s ease-in-out 0.45s infinite;
+}
+
+@keyframes energy-marker-creation-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.pending-creation-marker-icon {
+  background: transparent !important;
+  border: none !important;
+}
+
+@keyframes energy-marker-editing-pulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.85;
+    transform: scale(1.08);
+  }
+}
+
+.energy-asset-marker-icon {
+  background: transparent !important;
+  border: none !important;
+}
+
+.maintenance-incident-marker-icon {
+  background: transparent !important;
+  border: none !important;
+}
+
+/* Leaflet — contrôles dans la carte, sous le header et les overlays applicatifs */
+.leaflet-container {
+  z-index: 0;
+}
+
+.leaflet-container .leaflet-control-container {
+  z-index: 400;
+}
+
+.leaflet-container .leaflet-top.leaflet-left {
+  top: auto;
+  bottom: 1.5rem;
+  left: 1rem;
+}
+
+.leaflet-container .leaflet-control-zoom {
+  margin: 0;
+  border: none;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.12);
+}
+
+/* Popups au-dessus des overlays carte (filtres z-[450]) mais sous le header (z-[1100]) */
+.leaflet-popup-pane {
+  z-index: 500 !important;
+}
+
+.leaflet-tooltip-pane {
+  z-index: 500 !important;
+}
