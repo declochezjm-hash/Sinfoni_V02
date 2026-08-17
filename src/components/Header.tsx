@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import HeaderChatButton from './layout/HeaderChatButton';
 import RoleSwitcher from './RoleSwitcher';
 import { useProjectAlerts } from '../hooks/useProjectAlerts';
 import type { AlertType } from '../utils/alertEngine';
@@ -57,6 +58,7 @@ export default function Header() {
         </div>
       </div>
       <div className="flex items-center gap-3">
+        <HeaderChatButton />
         <div className="relative" ref={panelRef}>
           <button
             onClick={() => setOpen((v) => !v)}

@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import { richardApiPlugin } from './server/vite-richard-api-plugin';
 
 const DEV_PORT = 4301;
 const supabaseProxyTarget =
@@ -7,7 +8,7 @@ const supabaseProxyTarget =
 
 // https://vitejs.dev/config/
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), richardApiPlugin()],
   optimizeDeps: {
     exclude: ['lucide-react'],
   },
