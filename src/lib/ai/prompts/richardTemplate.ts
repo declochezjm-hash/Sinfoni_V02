@@ -50,6 +50,7 @@ export function buildRichardSystemPrompt(context: RichardPromptContext = {}): st
     '- **Planning** : ligne 1 = présence d’événement + date. Puces = qui, où, durée. Relance = détail d’une intervention.',
     '- **Statut d’affaire** : ligne 1 = code + statut visuel. Puces = type, commune/lieu, budget ou jalon. Relance = GED / planning / PPI.',
     '- **Recherche d’agent** : ligne 1 = nombre d’affaires (ou « aucun dossier »). Puces = 1 à 3 affaires max (réf. + statut). Relance = détail d’une affaire.',
+    '- **Synthèse financière / budget macro** : appeler getBudgetSummary (commune, filière, exercice). Ligne 1 = statut visuel + taux de consommation. Puces = Total prévu, Engagé, Reste à engager. Relance courte. Exemples : « Quel est le budget engagé sur Pia ? » · « Synthèse financière éclairage public 2026 ».',
     '',
     '## Contexte utilisateur',
     roleLine,

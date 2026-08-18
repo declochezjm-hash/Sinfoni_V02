@@ -436,3 +436,235 @@ export async function queryPpiMaintenanceOverview(
     },
   };
 }
+
+export interface BudgetSummaryFilters {
+  communeInsee?: string;
+  filiere?: string;
+  exercice?: number;
+}
+
+export interface BudgetSummaryResult {
+  ok: true;
+  filters: {
+    communeInsee?: string;
+    filiere?: string;
+    filiereResolved?: string;
+    exercice?: number;
+  };
+  affairesCount: number;
+  budgetTotal: number;
+  budgetEngage: number;
+  resteAEngager: number;
+  tauxConsommationPct: number | null;
+  source: 'projects' | 'ppi_planification';
+}
+
+const PROJECT_TYPE_BY_FILIERE: Record<string, string> = {
+  eclairage: 'Éclairage Public',
+  'eclairage public': 'Éclairage Public',
+  ep: 'Éclairage Public',
+  led: 'Éclairage Public',
+  electricite: 'Électricité',
+  elec: 'Électricité',
+  telecom: 'Télécom',
+  irve: 'IRVE',
+  borne: 'IRVE',
+  recharge: 'IRVE',
+};
+
+function foldAscii(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+}
+
+function roundMoney(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
+function consumptionRate(total: number, engage: number): number | null {
+  if (total <= 0) return null;
+  return Math.round((engage / total) * 1000) / 10;
+}
+
+function resolveFiliereFilter(filiere?: string): { type?: string; textPattern?: string } {
+  if (!filiere?.trim()) return {};
+  const folded = foldAscii(filiere);
+  const mappedType = PROJECT_TYPE_BY_FILIERE[folded];
+  if (mappedType) return { type: mappedType };
+
+  const knownType = (['Électricité', 'Éclairage Public', 'Télécom', 'IRVE'] as const).find(
+    (type) => foldAscii(type) === folded,
+  );
+  if (knownType) return { type: knownType };
+
+  return { textPattern: filiere.trim() };
+}
+
+interface BudgetProjectRow {
+  id: string;
+  reference: string;
+  title: string;
+  type: string;
+  budget_total: number | null;
+  budget_consumed: number | null;
+  ppi_year: number | null;
+  commune_insee_code: string | null;
+  location: string | null;
+}
+
+interface BudgetPpiRow {
+  project_id: string | null;
+  enveloppe_votee: number | null;
+  engage: number | null;
+}
+
+function sumBudgetFromProjects(rows: BudgetProjectRow[]): {
+  budgetTotal: number;
+  budgetEngage: number;
+  resteAEngager: number;
+  tauxConsommationPct: number | null;
+} {
+  const budgetTotal = roundMoney(
+    rows.reduce((sum, row) => sum + Number(row.budget_total ?? 0), 0),
+  );
+  const budgetEngage = roundMoney(
+    rows.reduce((sum, row) => sum + Number(row.budget_consumed ?? 0), 0),
+  );
+  return {
+    budgetTotal,
+    budgetEngage,
+    resteAEngager: roundMoney(budgetTotal - budgetEngage),
+    tauxConsommationPct: consumptionRate(budgetTotal, budgetEngage),
+  };
+}
+
+export async function queryBudgetSummary(
+  ctx: ReadOnlyDbContext,
+  filters: BudgetSummaryFilters = {},
+): Promise<BudgetSummaryResult> {
+  assertReadOnlyContext(ctx);
+  assertReadOnlyTable('projects');
+  const client = getReadOnlySupabaseClient();
+
+  const communeRaw = filters.communeInsee?.trim();
+  const forcedCommuneInsee =
+    ctx.userRole === 'COMMUNE' && ctx.communeInseeCode ? ctx.communeInseeCode : undefined;
+  const filiereFilter = resolveFiliereFilter(filters.filiere);
+  const exercice = filters.exercice;
+
+  let query = client
+    .from('projects')
+    .select(
+      'id, reference, title, type, budget_total, budget_consumed, ppi_year, commune_insee_code, location',
+    )
+    .eq('organization_id', ctx.tenantId);
+
+  if (forcedCommuneInsee) {
+    query = query.eq('commune_insee_code', forcedCommuneInsee);
+  } else if (communeRaw) {
+    if (/^\d{5}$/.test(communeRaw)) {
+      query = query.eq('commune_insee_code', communeRaw);
+    } else {
+      query = query.ilike('location', `%${escapeIlikePattern(communeRaw)}%`);
+    }
+  }
+
+  if (filiereFilter.type) {
+    query = query.eq('type', filiereFilter.type);
+  } else if (filiereFilter.textPattern) {
+    const pattern = `%${escapeIlikePattern(filiereFilter.textPattern)}%`;
+    query = query.or(
+      `type.ilike.${pattern},title.ilike.${pattern},reference.ilike.${pattern},location.ilike.${pattern}`,
+    );
+  }
+
+  const { data, error } = await query.order('updated_at', { ascending: false }).limit(1000);
+
+  if (error) throw new Error(error.message);
+
+  const projects = (data ?? []) as BudgetProjectRow[];
+  const appliedFilters = {
+    communeInsee: forcedCommuneInsee ?? communeRaw,
+    filiere: filters.filiere?.trim() || undefined,
+    filiereResolved: filiereFilter.type ?? filiereFilter.textPattern,
+    exercice,
+  };
+
+  const emptyResult = (source: BudgetSummaryResult['source']): BudgetSummaryResult => ({
+    ok: true,
+    filters: appliedFilters,
+    affairesCount: 0,
+    budgetTotal: 0,
+    budgetEngage: 0,
+    resteAEngager: 0,
+    tauxConsommationPct: null,
+    source,
+  });
+
+  if (projects.length === 0) {
+    return emptyResult('projects');
+  }
+
+  if (exercice != null) {
+    assertReadOnlyTable('ppi_planification');
+    const projectIds = projects.map((row) => row.id);
+    const { data: ppiData, error: ppiError } = await client
+      .from('ppi_planification')
+      .select('project_id, enveloppe_votee, engage')
+      .eq('organization_id', ctx.tenantId)
+      .eq('exercise_year', exercice)
+      .in('project_id', projectIds);
+
+    if (ppiError) throw new Error(ppiError.message);
+
+    const ppiLines = (ppiData ?? []) as BudgetPpiRow[];
+    if (ppiLines.length > 0) {
+      const budgetTotal = roundMoney(
+        ppiLines.reduce((sum, row) => sum + Number(row.enveloppe_votee ?? 0), 0),
+      );
+      const budgetEngage = roundMoney(
+        ppiLines.reduce((sum, row) => sum + Number(row.engage ?? 0), 0),
+      );
+      const distinctProjects = new Set(
+        ppiLines
+          .map((row) => (row.project_id != null ? String(row.project_id) : ''))
+          .filter(Boolean),
+      );
+
+      return {
+        ok: true,
+        filters: appliedFilters,
+        affairesCount: distinctProjects.size,
+        budgetTotal,
+        budgetEngage,
+        resteAEngager: roundMoney(budgetTotal - budgetEngage),
+        tauxConsommationPct: consumptionRate(budgetTotal, budgetEngage),
+        source: 'ppi_planification',
+      };
+    }
+
+    const yearProjects = projects.filter((row) => Number(row.ppi_year) === exercice);
+    if (yearProjects.length === 0) {
+      return emptyResult('projects');
+    }
+
+    return {
+      ok: true,
+      filters: appliedFilters,
+      affairesCount: yearProjects.length,
+      ...sumBudgetFromProjects(yearProjects),
+      source: 'projects',
+    };
+  }
+
+  return {
+    ok: true,
+    filters: appliedFilters,
+    affairesCount: projects.length,
+    ...sumBudgetFromProjects(projects),
+    source: 'projects',
+  };
+}

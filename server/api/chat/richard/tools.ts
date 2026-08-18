@@ -4,6 +4,7 @@ import {
   type ReadOnlyDbContext,
   queryAgentAffaires,
   queryAffaireDetails,
+  queryBudgetSummary,
   queryPpiMaintenanceOverview,
 } from '../../../db/readOnlyClient.ts';
 import { parseAffaireDetailsInput } from './dbContext.ts';
@@ -140,6 +141,36 @@ export function createRichardTools(dbContext: ReadOnlyDbContext): ToolSet {
             maintenanceLimit ?? 15,
             ppiLimit ?? 15,
           ),
+        ),
+    }),
+
+    getBudgetSummary: tool({
+      description:
+        "Synthèse budgétaire macro (total prévu/voté, engagé/consommé, reste à engager, nombre d'affaires). À utiliser pour une question financière globale (commune, filière, exercice), pas pour le détail d'une affaire unique.",
+      inputSchema: z.object({
+        communeInsee: z
+          .string()
+          .optional()
+          .describe(
+            'Code INSEE (5 chiffres) ou nom de commune (ex. Pia, Arles). Filtre location / commune_insee_code.',
+          ),
+        filiere: z
+          .string()
+          .optional()
+          .describe(
+            'Filière métier : Éclairage Public, Électricité, Télécom, IRVE, voirie… (alias acceptés : éclairage, EP, IRVE).',
+          ),
+        exercice: z
+          .number()
+          .int()
+          .min(2000)
+          .max(2100)
+          .optional()
+          .describe("Année d'exercice (ex. 2026). Utilise les lignes PPI si disponibles, sinon ppi_year des affaires."),
+      }),
+      execute: async ({ communeInsee, filiere, exercice }) =>
+        safeReadOnlyExecute('la synthèse budgétaire', async () =>
+          queryBudgetSummary(dbContext, { communeInsee, filiere, exercice }),
         ),
     }),
   };

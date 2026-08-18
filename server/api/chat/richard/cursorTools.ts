@@ -3,6 +3,7 @@ import {
   type ReadOnlyDbContext,
   queryAgentAffaires,
   queryAffaireDetails,
+  queryBudgetSummary,
   queryPpiMaintenanceOverview,
 } from '../../../db/readOnlyClient.ts';
 import { parseAffaireDetailsInput } from './dbContext.ts';
@@ -121,6 +122,44 @@ export function createRichardCursorCustomTools(
         );
       },
     },
+
+    getBudgetSummary: {
+      description:
+        "Synthèse budgétaire macro (total prévu/voté, engagé/consommé, reste à engager, nombre d'affaires). À utiliser pour une question financière globale (commune, filière, exercice), pas pour le détail d'une affaire unique.",
+      inputSchema: {
+        type: 'object',
+        properties: {
+          communeInsee: {
+            type: 'string',
+            description:
+              'Code INSEE (5 chiffres) ou nom de commune (ex. Pia, Arles). Filtre location / commune_insee_code.',
+          },
+          filiere: {
+            type: 'string',
+            description:
+              'Filière métier : Éclairage Public, Électricité, Télécom, IRVE, voirie… (alias acceptés : éclairage, EP, IRVE).',
+          },
+          exercice: {
+            type: 'number',
+            description:
+              "Année d'exercice (ex. 2026). Utilise les lignes PPI si disponibles, sinon ppi_year des affaires.",
+          },
+        },
+      },
+      execute: async (args) => {
+        const communeInsee = typeof args.communeInsee === 'string' ? args.communeInsee : undefined;
+        const filiere = typeof args.filiere === 'string' ? args.filiere : undefined;
+        let exercice: number | undefined;
+        if (typeof args.exercice === 'number' && Number.isFinite(args.exercice)) {
+          exercice = Math.trunc(args.exercice);
+        } else if (typeof args.exercice === 'string' && /^\d{4}$/.test(args.exercice.trim())) {
+          exercice = Number(args.exercice.trim());
+        }
+        return safeReadOnlyExecute('la synthèse budgétaire', async () =>
+          queryBudgetSummary(dbContext, { communeInsee, filiere, exercice }),
+        );
+      },
+    },
   };
 }
 
@@ -128,6 +167,7 @@ const RICHARD_DB_TOOL_NAMES = new Set([
   'getAgentAffaires',
   'getAffaireDetails',
   'getPPIMaintenanceOverview',
+  'getBudgetSummary',
 ]);
 
 export function mapCursorToolName(rawName: string): string | null {

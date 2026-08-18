@@ -19,10 +19,11 @@ import type { RichardChatRequestBody } from './route.ts';
 
 const RICHARD_TOOLS_INSTRUCTION = `
 ## Outils (usage interne — ne jamais en parler à l'utilisateur)
-Appelle silencieusement un outil dès qu'on demande un planning, un statut d'affaire ou un agent. Ne décris jamais l'outil ni la BDD.
+Appelle silencieusement un outil dès qu'on demande un planning, un statut d'affaire, un budget macro ou un agent. Ne décris jamais l'outil ni la BDD.
 - getAgentAffaires : affaires d'un agent.
 - getAffaireDetails : détail par UUID ou référence (ex. AF-2026-VOIRIE-005).
 - getPPIMaintenanceOverview : PPI et tickets maintenance.
+- getBudgetSummary : synthèse financière (total, engagé, reste, nb affaires). Filtres : communeInsee, filiere, exercice.
 Si ok: false / AFFAIRE_NOT_FOUND : « ⚪ Aucune affaire correspondante dans votre périmètre. » + une relance. N'invente rien.`;
 
 function buildDbContext(body: RichardChatRequestBody) {

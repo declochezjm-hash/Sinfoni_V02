@@ -4,12 +4,14 @@ const RICHARD_DB_TOOLS = new Set([
   'getAgentAffaires',
   'getAffaireDetails',
   'getPPIMaintenanceOverview',
+  'getBudgetSummary',
 ]);
 
 export const RICHARD_TOOL_LABELS: Record<string, string> = {
   getAgentAffaires: 'Données récupérées depuis le module Affaires',
   getAffaireDetails: 'Données récupérées depuis Affaires & GED',
   getPPIMaintenanceOverview: 'Données récupérées depuis PPI & Maintenance',
+  getBudgetSummary: 'Analyse Budgétaire',
 };
 
 export interface RichardToolBadge {
