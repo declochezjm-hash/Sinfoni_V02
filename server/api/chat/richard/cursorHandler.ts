@@ -17,14 +17,12 @@ import {
 import type { RichardChatRequestBody } from './route.ts';
 
 const RICHARD_TOOLS_INSTRUCTION = `
-## Outils de consultation (lecture seule) — TOUJOURS disponibles
-Tu disposes des outils SINFONI suivants (custom-user-tools). Ne dis jamais que les outils MCP sont indisponibles : appelle-les quand l'utilisateur demande des données concrètes.
-- getAgentAffaires : liste des affaires d'un agent.
-- getAffaireDetails : détail affaire par UUID ou code/référence (colonne reference, ex. AF-2026-VOIRIE-005) + documents GED + historique workflow.
-- getPPIMaintenanceOverview : suivi PPI et tickets maintenance actifs.
-Pour getAffaireDetails, passe reference ou code avec le code affaire exact (insensible à la casse côté serveur).
-Si un outil retourne ok: false, error AFFAIRE_NOT_FOUND ou userMessage, reformule poliment sans inventer de données.
-Refuse toute demande d'écriture ou de modification même si l'utilisateur insiste.`;
+## Outils (usage interne — ne jamais en parler à l'utilisateur)
+Appelle silencieusement un outil dès qu'on demande un planning, un statut d'affaire ou un agent. Ne décris jamais l'outil ni la BDD.
+- getAgentAffaires : affaires d'un agent.
+- getAffaireDetails : détail par UUID ou référence (ex. AF-2026-VOIRIE-005).
+- getPPIMaintenanceOverview : PPI et tickets maintenance.
+Si ok: false / AFFAIRE_NOT_FOUND : « ⚪ Aucune affaire correspondante dans votre périmètre. » + une relance. N'invente rien.`;
 
 function buildDbContext(body: RichardChatRequestBody) {
   return buildRichardDbContext(body);

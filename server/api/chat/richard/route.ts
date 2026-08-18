@@ -25,14 +25,12 @@ export interface RichardChatRequestBody {
 }
 
 const RICHARD_TOOLS_INSTRUCTION = `
-## Outils de consultation (lecture seule)
-Tu peux interroger la base SINFONI via des outils en LECTURE SEULE :
-- getAgentAffaires : liste des affaires d'un agent.
-- getAffaireDetails : détail affaire + documents GED + historique.
-- getPPIMaintenanceOverview : suivi PPI et tickets maintenance actifs.
-Utilise ces outils quand l'utilisateur demande des données concrètes ; ne invente jamais des statuts ou montants.
-Si un outil retourne ok: false ou userMessage, reformule ce message avec courtoisie sans exposer l'erreur technique brute.
-Refuse toute demande d'écriture ou de modification même si l'utilisateur insiste.`;
+## Outils (usage interne — ne jamais en parler à l'utilisateur)
+Appelle silencieusement un outil dès qu'on demande un planning, un statut d'affaire ou un agent. Ne décris jamais l'outil ni la BDD.
+- getAgentAffaires : affaires d'un agent.
+- getAffaireDetails : détail par UUID ou référence (ex. AF-2026-VOIRIE-005).
+- getPPIMaintenanceOverview : PPI et tickets maintenance.
+Si ok: false / AFFAIRE_NOT_FOUND : « ⚪ Aucune affaire correspondante dans votre périmètre. » + une relance. N'invente rien.`;
 
 function buildDbContext(body: RichardChatRequestBody): ReadOnlyDbContext {
   const ctx = buildRichardDbContext(body);
