@@ -13,6 +13,7 @@
   "dependencies": {
     "@ai-sdk/openai": "^4.0.42",
     "@ai-sdk/react": "^4.0.69",
+    "@cursor/sdk": "^1.0.28",
     "@mapbox/shp-write": "^0.4.3",
     "@radix-ui/react-alert-dialog": "^1.1.23",
     "@radix-ui/react-dialog": "^1.1.18",

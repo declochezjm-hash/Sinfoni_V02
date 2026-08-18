@@ -6,12 +6,19 @@ const RICHARD_CHAT_PATH = '/api/chat/richard';
 
 function applyRichardEnv(mode: string): void {
   const env = loadEnv(mode, process.cwd(), '');
-  if (env.OPENAI_API_KEY) {
-    process.env.OPENAI_API_KEY = env.OPENAI_API_KEY;
-  }
-  if (env.OPENAI_MODEL) {
-    process.env.OPENAI_MODEL = env.OPENAI_MODEL;
-  }
+  const pick = (key: string): string | undefined => {
+    const value = env[key]?.trim();
+    return value ? value : undefined;
+  };
+
+  const cursorKey = pick('CURSOR_API_KEY');
+  if (cursorKey) process.env.CURSOR_API_KEY = cursorKey;
+  const cursorModel = pick('CURSOR_MODEL');
+  if (cursorModel) process.env.CURSOR_MODEL = cursorModel;
+  const openaiKey = pick('OPENAI_API_KEY');
+  if (openaiKey) process.env.OPENAI_API_KEY = openaiKey;
+  const openaiModel = pick('OPENAI_MODEL');
+  if (openaiModel) process.env.OPENAI_MODEL = openaiModel;
   if (env.SUPABASE_URL) {
     process.env.SUPABASE_URL = env.SUPABASE_URL;
   }
@@ -42,6 +49,7 @@ function registerRichardMiddleware(middlewares: Connect.Server, mode: string): v
 
     void (async () => {
       try {
+        applyRichardEnv(mode);
         const { POST } = await import('./api/chat/richard/route.ts');
         await POST(req, res);
       } catch (error) {

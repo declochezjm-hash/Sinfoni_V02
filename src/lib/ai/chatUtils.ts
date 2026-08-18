@@ -132,11 +132,40 @@ export function getFriendlyChatErrorMessage(error: Error | undefined): string {
 function mapKnownErrorText(message: string): string {
   const normalized = message.toLowerCase();
 
+  if (
+    normalized.includes('clé cursor invalide') ||
+    normalized.includes('cle cursor invalide') ||
+    normalized.includes('invalid user api key')
+  ) {
+    return 'Clé Cursor invalide. Créez une User API Key sur https://cursor.com/dashboard/api (copiez le secret complet à la création) puis mettez-le dans .env.local.';
+  }
+  if (normalized.includes('temporairement indisponible')) {
+    return message;
+  }
   if (normalized.includes('404') || normalized.includes('not found')) {
     return 'Le service Richard n’est pas joignable. Redémarrez le serveur de développement (npm run dev).';
   }
-  if (normalized.includes('openai') || normalized.includes('api_key')) {
+  if (
+    normalized.includes('richard n’est pas disponible') ||
+    normalized.includes("richard n'est pas disponible") ||
+    normalized.includes('ajoutez cursor_api_key') ||
+    normalized.includes('ajoutez openai_api_key')
+  ) {
+    return message;
+  }
+  if (
+    normalized.includes('openai_api_key') &&
+    (normalized.includes('manqu') || normalized.includes('non configur') || normalized.includes('absent'))
+  ) {
     return 'Richard n’est pas disponible : ajoutez OPENAI_API_KEY dans .env.local puis redémarrez npm run dev.';
+  }
+  if (
+    normalized.includes('cursor_api_key') &&
+    (normalized.includes('manqu') || normalized.includes('non configur') || normalized.includes('absent') || normalized.includes('invalide'))
+  ) {
+    return message.includes('invalide')
+      ? message
+      : 'Richard n’est pas disponible : ajoutez CURSOR_API_KEY dans .env.local puis redémarrez npm run dev.';
   }
   if (normalized.includes('tenant') || normalized.includes('organization')) {
     return 'Votre session ne permet pas d’accéder aux données. Reconnectez-vous ou changez de profil.';

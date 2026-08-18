@@ -53,7 +53,112 @@ export function getReadOnlySupabaseClient(): SupabaseClient {
 }
 
 const UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+const READ_ONLY_QUERY_TIMEOUT_MS = 15_000;
+
+function isUuid(value: string): boolean {
+  return UUID_RE.test(value);
+}
+
+function escapeIlikePattern(value: string): string {
+  return value.replace(/[%_\\]/g, '\\$&');
+}
+
+function withReadOnlyTimeout<T>(label: string, promise: Promise<T>): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error(`Délai dépassé (${label}, ${READ_ONLY_QUERY_TIMEOUT_MS}ms).`));
+    }, READ_ONLY_QUERY_TIMEOUT_MS);
+
+    promise
+      .then((value) => {
+        clearTimeout(timer);
+        resolve(value);
+      })
+      .catch((error: unknown) => {
+        clearTimeout(timer);
+        reject(error);
+      });
+  });
+}
+
+function buildProjectsBaseQuery(client: SupabaseClient, ctx: ReadOnlyDbContext) {
+  let query = client.from('projects').select('*').eq('organization_id', ctx.tenantId);
+
+  if (ctx.userRole === 'COMMUNE' && ctx.communeInseeCode) {
+    query = query.eq('commune_insee_code', ctx.communeInseeCode);
+  }
+
+  return query;
+}
+
+export interface AffaireLookupInput {
+  affaireId?: string;
+  reference?: string;
+  code?: string;
+  codeAffaire?: string;
+}
+
+export class AffaireNotFoundError extends Error {
+  readonly code = 'AFFAIRE_NOT_FOUND';
+  readonly searched: { reference?: string; affaireId?: string; organizationId: string };
+
+  constructor(
+    message: string,
+    searched: { reference?: string; affaireId?: string; organizationId: string },
+  ) {
+    super(message);
+    this.name = 'AffaireNotFoundError';
+    this.searched = searched;
+  }
+}
+
+async function findProjectByIdentifier(
+  client: SupabaseClient,
+  ctx: ReadOnlyDbContext,
+  input: AffaireLookupInput,
+): Promise<Record<string, unknown>> {
+  const referenceCode = (input.reference ?? input.code ?? input.codeAffaire)?.trim();
+  const affaireId = input.affaireId?.trim();
+
+  if (!affaireId && !referenceCode) {
+    throw new Error('affaireId, reference ou code affaire requis.');
+  }
+
+  const uuidCandidates = new Set<string>();
+  if (affaireId && isUuid(affaireId)) uuidCandidates.add(affaireId);
+  if (referenceCode && isUuid(referenceCode)) uuidCandidates.add(referenceCode);
+
+  for (const id of uuidCandidates) {
+    const { data, error } = await buildProjectsBaseQuery(client, ctx).eq('id', id).limit(1);
+    if (error) throw new Error(error.message);
+    if (data?.[0]) return data[0] as Record<string, unknown>;
+  }
+
+  if (referenceCode) {
+    const attempts: Array<(q: ReturnType<typeof buildProjectsBaseQuery>) => ReturnType<typeof buildProjectsBaseQuery>> = [
+      (q) => q.eq('reference', referenceCode),
+      (q) => q.ilike('reference', referenceCode),
+      (q) => q.ilike('reference', `%${escapeIlikePattern(referenceCode)}%`),
+    ];
+
+    for (const applyFilter of attempts) {
+      const { data, error } = await applyFilter(buildProjectsBaseQuery(client, ctx)).limit(1);
+      if (error) throw new Error(error.message);
+      if (data?.[0]) return data[0] as Record<string, unknown>;
+    }
+  }
+
+  throw new AffaireNotFoundError(
+    'Aucune affaire ne correspond à ce code pour votre organisation.',
+    {
+      reference: referenceCode,
+      affaireId: affaireId && isUuid(affaireId) ? affaireId : undefined,
+      organizationId: ctx.tenantId,
+    },
+  );
+}
 
 export function assertReadOnlyContext(ctx: ReadOnlyDbContext): void {
   if (!ctx.tenantId || !UUID_RE.test(ctx.tenantId)) {
@@ -154,67 +259,65 @@ export async function queryAffaireDetails(
   ctx: ReadOnlyDbContext,
   affaireId?: string,
   reference?: string,
+  extra?: Pick<AffaireLookupInput, 'code' | 'codeAffaire'>,
 ): Promise<AffaireDetailsResult> {
   assertReadOnlyContext(ctx);
   assertReadOnlyTable('projects');
   const client = getReadOnlySupabaseClient();
 
-  let projectQuery = client.from('projects').select('*').eq('organization_id', ctx.tenantId);
-
-  if (ctx.userRole === 'COMMUNE' && ctx.communeInseeCode) {
-    projectQuery = projectQuery.eq('commune_insee_code', ctx.communeInseeCode);
-  }
-
-  if (affaireId) {
-    projectQuery = projectQuery.eq('id', affaireId);
-  } else if (reference) {
-    projectQuery = projectQuery.eq('reference', reference);
-  } else {
-    throw new Error('affaireId ou reference requis.');
-  }
-
-  const { data: projectRows, error: projectError } = await projectQuery.limit(1);
-  if (projectError) throw new Error(projectError.message);
-
-  const project = projectRows?.[0];
-  if (!project) {
-    return { affaire: null, documents: [], activityHistory: [], workflowSteps: [] };
+  let project: Record<string, unknown>;
+  try {
+    project = await withReadOnlyTimeout(
+      'recherche affaire',
+      findProjectByIdentifier(client, ctx, {
+        affaireId,
+        reference,
+        code: extra?.code,
+        codeAffaire: extra?.codeAffaire,
+      }),
+    );
+  } catch (error) {
+    if (error instanceof AffaireNotFoundError) {
+      return { affaire: null, documents: [], activityHistory: [], workflowSteps: [] };
+    }
+    throw error;
   }
 
   const projectId = String(project.id);
 
-  let documentsQuery = client
-    .from('documents')
-    .select('id, name, category, size, version, created_at')
-    .eq('organization_id', ctx.tenantId)
-    .eq('project_id', projectId);
-
-  let activityQuery = client
-    .from('activity_logs')
-    .select('id, action, user_name, user_role, timestamp')
-    .eq('organization_id', ctx.tenantId)
-    .eq('target_type', 'project')
-    .eq('target_id', projectId);
-
-  let workflowQuery = client
-    .from('workflow_steps')
-    .select('step_key, step_label, step_order, status, completed_at, completed_by')
-    .eq('organization_id', ctx.tenantId)
-    .eq('project_id', projectId)
-    .order('step_order', { ascending: true });
-
-  const [documentsRes, activityRes, workflowRes] = await Promise.all([
-    documentsQuery.order('created_at', { ascending: false }).limit(25),
-    activityQuery.order('timestamp', { ascending: false }).limit(25),
-    workflowQuery,
-  ]);
+  const [documentsRes, activityRes, workflowRes] = await withReadOnlyTimeout(
+    'détails affaire (GED, historique, workflow)',
+    Promise.all([
+      client
+        .from('documents')
+        .select('id, name, category, size, version, created_at')
+        .eq('organization_id', ctx.tenantId)
+        .eq('project_id', projectId)
+        .order('created_at', { ascending: false })
+        .limit(25),
+      client
+        .from('activity_logs')
+        .select('id, action, user_name, user_role, timestamp')
+        .eq('organization_id', ctx.tenantId)
+        .eq('target_type', 'project')
+        .eq('target_id', projectId)
+        .order('timestamp', { ascending: false })
+        .limit(25),
+      client
+        .from('workflow_steps')
+        .select('step_key, step_label, step_order, status, completed_at, completed_by')
+        .eq('organization_id', ctx.tenantId)
+        .eq('project_id', projectId)
+        .order('step_order', { ascending: true }),
+    ]),
+  );
 
   if (documentsRes.error) throw new Error(documentsRes.error.message);
   if (activityRes.error) throw new Error(activityRes.error.message);
   if (workflowRes.error) throw new Error(workflowRes.error.message);
 
   return {
-    affaire: project as Record<string, unknown>,
+    affaire: project,
     documents: (documentsRes.data ?? []).map((row) => ({
       id: String(row.id),
       name: String(row.name),

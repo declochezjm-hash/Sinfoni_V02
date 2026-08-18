@@ -29,7 +29,7 @@ function formatMessageTime(date: Date): string {
 }
 
 export default function RichardChatDrawer({ open, onOpenChange }: RichardChatDrawerProps) {
-  const { messages, sendMessage, status, setMessages, error } = useRichardChat();
+  const { messages, sendMessage, status, error, resetConversation } = useRichardChat();
   const [input, setInput] = useState('');
   const [timestamps, setTimestamps] = useState<Record<string, Date>>({});
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -72,7 +72,7 @@ export default function RichardChatDrawer({ open, onOpenChange }: RichardChatDra
   const isBusy = status === 'submitted' || status === 'streaming';
 
   const handleReset = () => {
-    setMessages([]);
+    resetConversation();
     setTimestamps({});
     setInput('');
   };

@@ -10,6 +10,8 @@ import {
 } from 'ai';
 import { buildRichardSystemPrompt } from '../../../../src/lib/ai/prompts/richardTemplate.ts';
 import { type ReadOnlyDbContext, assertReadOnlyContext } from '../../../db/readOnlyClient.ts';
+import { handleCursorRichard } from './cursorHandler.ts';
+import { buildRichardDbContext } from './dbContext.ts';
 import { createRichardTools } from './tools.ts';
 
 export interface RichardChatRequestBody {
@@ -19,6 +21,7 @@ export interface RichardChatRequestBody {
   tenantId?: string;
   userId?: string;
   communeInseeCode?: string;
+  sessionKey?: string;
 }
 
 const RICHARD_TOOLS_INSTRUCTION = `
@@ -32,18 +35,7 @@ Si un outil retourne ok: false ou userMessage, reformule ce message avec courtoi
 Refuse toute demande d'écriture ou de modification même si l'utilisateur insiste.`;
 
 function buildDbContext(body: RichardChatRequestBody): ReadOnlyDbContext {
-  const tenantId = body.tenantId?.trim();
-  if (!tenantId) {
-    throw new Error('tenant_id (organization_id) requis pour les consultations BDD.');
-  }
-
-  const ctx: ReadOnlyDbContext = {
-    tenantId,
-    userId: body.userId,
-    userRole: body.userRole,
-    communeInseeCode: body.communeInseeCode,
-  };
-
+  const ctx = buildRichardDbContext(body);
   assertReadOnlyContext(ctx);
   return ctx;
 }
@@ -78,12 +70,45 @@ function mapRouteErrorToUserMessage(error: unknown): string {
   return 'Richard est temporairement indisponible. Veuillez réessayer.';
 }
 
+async function handleOpenAiRichard(
+  _req: IncomingMessage,
+  res: ServerResponse,
+  body: RichardChatRequestBody,
+): Promise<void> {
+  const dbContext = buildDbContext(body);
+  const modelId = process.env.OPENAI_MODEL ?? 'gpt-4o-mini';
+  const system = buildRichardSystemPrompt({
+    userRole: body.userRole,
+    userName: body.userName,
+  });
+
+  const tools = createRichardTools(dbContext);
+
+  const result = streamText({
+    model: openai(modelId),
+    system: `${system}${RICHARD_TOOLS_INSTRUCTION}`,
+    messages: await convertToModelMessages(body.messages),
+    tools,
+    stopWhen: stepCountIs(5),
+  });
+
+  const stream = toUIMessageStream({ stream: result.stream });
+
+  pipeUIMessageStreamToResponse({
+    response: res,
+    stream,
+  });
+}
+
 /**
- * Handler POST /api/chat/richard — streaming UI messages (Vercel AI SDK v7).
- * Outils lecture seule BDD + multi-step (max 5 étapes).
+ * Handler POST /api/chat/richard — streaming UI messages.
+ * Priorité : Cursor SDK (CURSOR_API_KEY) puis OpenAI (OPENAI_API_KEY).
  */
 export async function POST(req: IncomingMessage, res: ServerResponse): Promise<void> {
-  if (!process.env.OPENAI_API_KEY) {
+  const hasCursorKey = Boolean(process.env.CURSOR_API_KEY?.trim());
+  const hasOpenAiKey = Boolean(process.env.OPENAI_API_KEY?.trim());
+
+  if (!hasCursorKey && !hasOpenAiKey) {
     sendJsonError(res, 503, 'Richard est temporairement indisponible.');
     return;
   }
@@ -96,29 +121,12 @@ export async function POST(req: IncomingMessage, res: ServerResponse): Promise<v
       return;
     }
 
-    const dbContext = buildDbContext(body);
-    const modelId = process.env.OPENAI_MODEL ?? 'gpt-4o-mini';
-    const system = buildRichardSystemPrompt({
-      userRole: body.userRole,
-      userName: body.userName,
-    });
+    if (hasCursorKey) {
+      await handleCursorRichard(req, res, body);
+      return;
+    }
 
-    const tools = createRichardTools(dbContext);
-
-    const result = streamText({
-      model: openai(modelId),
-      system: `${system}${RICHARD_TOOLS_INSTRUCTION}`,
-      messages: await convertToModelMessages(body.messages),
-      tools,
-      stopWhen: stepCountIs(5),
-    });
-
-    const stream = toUIMessageStream({ stream: result.stream });
-
-    pipeUIMessageStreamToResponse({
-      response: res,
-      stream,
-    });
+    await handleOpenAiRichard(req, res, body);
   } catch (error) {
     const message = mapRouteErrorToUserMessage(error);
     if (!res.headersSent) {
