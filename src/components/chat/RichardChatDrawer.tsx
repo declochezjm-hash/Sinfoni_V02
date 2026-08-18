@@ -20,6 +20,7 @@ import {
   getUIMessageText,
   isRichardQueryingDatabase,
 } from '../../lib/ai/chatUtils';
+import RichardMarkdown from './RichardMarkdown';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Textarea } from '../ui/textarea';
@@ -240,9 +241,12 @@ export default function RichardChatDrawer({ open, onOpenChange }: RichardChatDra
             </p>
           )}
           {toolBadges}
-          {text && (
-            <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">{text}</p>
-          )}
+          {text &&
+            (isUser ? (
+              <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">{text}</p>
+            ) : (
+              <RichardMarkdown text={text} />
+            ))}
           {(timestamp || (!isUser && text)) && (
             <div className="mt-1 flex items-center justify-between gap-2">
               {timestamp ? (
