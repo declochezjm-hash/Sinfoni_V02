@@ -73,7 +73,8 @@ function buildConversationExport(messages: UIMessage[], timestamps: Record<strin
 }
 
 export default function RichardChatDrawer({ open, onOpenChange }: RichardChatDrawerProps) {
-  const { messages, sendMessage, status, error, resetConversation } = useRichardChat();
+  const { messages, sendMessage, status, error, resetConversation, currentEntity } =
+    useRichardChat();
   const [input, setInput] = useState('');
   const [timestamps, setTimestamps] = useState<Record<string, Date>>({});
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
@@ -299,6 +300,11 @@ export default function RichardChatDrawer({ open, onOpenChange }: RichardChatDra
                   </span>
                   <span className="text-emerald-600 font-medium">En ligne</span>
                 </SheetDescription>
+                {currentEntity?.id && (
+                  <p className="mt-0.5 truncate text-[10px] font-normal text-slate-400" title={currentEntity.id}>
+                    Contexte : {currentEntity.id}
+                  </p>
+                )}
               </div>
             </div>
             <div className="flex items-center gap-1 shrink-0">

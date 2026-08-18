@@ -8,6 +8,7 @@ import {
   toUIMessageStream,
   type UIMessage,
 } from 'ai';
+import { buildRichardNavigationNote, sanitizeRichardPageContext } from '../../../../src/lib/ai/pageContext.ts';
 import { buildRichardSystemPrompt } from '../../../../src/lib/ai/prompts/richardTemplate.ts';
 import { type ReadOnlyDbContext, assertReadOnlyContext } from '../../../db/readOnlyClient.ts';
 import { handleCursorRichard } from './cursorHandler.ts';
@@ -22,6 +23,8 @@ export interface RichardChatRequestBody {
   userId?: string;
   communeInseeCode?: string;
   sessionKey?: string;
+  currentPath?: string;
+  currentEntity?: { type: string; id: string } | null;
 }
 
 const RICHARD_TOOLS_INSTRUCTION = `
@@ -79,12 +82,14 @@ async function handleOpenAiRichard(
     userRole: body.userRole,
     userName: body.userName,
   });
+  const { currentPath, currentEntity } = sanitizeRichardPageContext(body);
+  const navigationNote = buildRichardNavigationNote(currentPath, currentEntity);
 
   const tools = createRichardTools(dbContext);
 
   const result = streamText({
     model: openai(modelId),
-    system: `${system}${RICHARD_TOOLS_INSTRUCTION}`,
+    system: `${system}${RICHARD_TOOLS_INSTRUCTION}${navigationNote ? `\n\n${navigationNote}` : ''}`,
     messages: await convertToModelMessages(body.messages),
     tools,
     stopWhen: stepCountIs(5),

@@ -6,6 +6,7 @@ import {
   pipeUIMessageStreamToResponse,
   type UIMessage,
 } from 'ai';
+import { buildRichardNavigationNote, sanitizeRichardPageContext } from '../../../../src/lib/ai/pageContext.ts';
 import { buildRichardSystemPrompt } from '../../../../src/lib/ai/prompts/richardTemplate.ts';
 import { createRichardCursorCustomTools, mapCursorToolName } from './cursorTools.ts';
 import { buildRichardDbContext } from './dbContext.ts';
@@ -156,6 +157,8 @@ export async function handleCursorRichard(
       userRole: body.userRole,
       userName: body.userName,
     })}${RICHARD_TOOLS_INSTRUCTION}`;
+    const { currentPath, currentEntity } = sanitizeRichardPageContext(body);
+    const navigationNote = buildRichardNavigationNote(currentPath, currentEntity);
 
     const customTools = createRichardCursorCustomTools(dbContext);
     const session = await getOrCreateRichardSession({
@@ -167,8 +170,10 @@ export async function handleCursorRichard(
 
     const isFirstTurn = !isRichardSessionInitialized(sessionKey);
     const prompt = isFirstTurn
-      ? `[Instructions système — Richard, assistant SINFONI]\n${system}\n\n[Utilisateur]\n${userText}`
-      : userText;
+      ? `[Instructions système — Richard, assistant SINFONI]\n${system}${navigationNote ? `\n\n${navigationNote}` : ''}\n\n[Utilisateur]\n${userText}`
+      : navigationNote
+        ? `${navigationNote}\n\n${userText}`
+        : userText;
 
     const messageId = generateId();
     const textPartId = generateId();
