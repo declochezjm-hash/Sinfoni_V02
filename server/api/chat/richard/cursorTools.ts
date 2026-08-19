@@ -7,6 +7,7 @@ import {
   queryPpiMaintenanceOverview,
 } from '../../../db/readOnlyClient.ts';
 import { parseAffaireDetailsInput } from './dbContext.ts';
+import { fetchProfileGuide } from './profileGuides.ts';
 
 function affaireNotFoundPayload(searched: { reference?: string; affaireId?: string }) {
   const label = searched.reference ?? searched.affaireId ?? 'ce code';
@@ -160,19 +161,50 @@ export function createRichardCursorCustomTools(
         );
       },
     },
+
+    getProfileGuide: {
+      description:
+        'Charge le guide complet et la fiche métier SINFONI (Markdown) depuis src/docs/profiles/[role].md. À appeler pour toute demande de guide, fiche métier ou bouton « Guides & Fiches Métier ».',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          profileId: {
+            type: 'string',
+            description: 'Identifiant de fiche : dgs, dst, charge-affaires, finances, elu.',
+          },
+          role: {
+            type: 'string',
+            description:
+              "Rôle ou profil demandé (DGS, DST, Chargé d'Affaires, Finances, Élu…).",
+          },
+        },
+      },
+      execute: async (args) => {
+        const profileId = typeof args.profileId === 'string' ? args.profileId : undefined;
+        const role = typeof args.role === 'string' ? args.role : undefined;
+        return safeReadOnlyExecute('la fiche métier', async () =>
+          fetchProfileGuide({
+            profileId,
+            role,
+            userRole: dbContext.userRole,
+          }),
+        );
+      },
+    },
   };
 }
 
-const RICHARD_DB_TOOL_NAMES = new Set([
+const RICHARD_TOOL_NAMES = new Set([
   'getAgentAffaires',
   'getAffaireDetails',
   'getPPIMaintenanceOverview',
   'getBudgetSummary',
+  'getProfileGuide',
 ]);
 
 export function mapCursorToolName(rawName: string): string | null {
   const normalized = rawName.toLowerCase();
-  for (const name of RICHARD_DB_TOOL_NAMES) {
+  for (const name of RICHARD_TOOL_NAMES) {
     if (
       rawName === name ||
       rawName.endsWith(name) ||

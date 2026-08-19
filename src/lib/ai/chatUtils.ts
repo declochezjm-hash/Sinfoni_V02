@@ -5,6 +5,7 @@ const RICHARD_DB_TOOLS = new Set([
   'getAffaireDetails',
   'getPPIMaintenanceOverview',
   'getBudgetSummary',
+  'getProfileGuide',
 ]);
 
 export const RICHARD_TOOL_LABELS: Record<string, string> = {
@@ -12,6 +13,7 @@ export const RICHARD_TOOL_LABELS: Record<string, string> = {
   getAffaireDetails: 'Données récupérées depuis Affaires & GED',
   getPPIMaintenanceOverview: 'Données récupérées depuis PPI & Maintenance',
   getBudgetSummary: 'Analyse Budgétaire',
+  getProfileGuide: 'Guide & Fiche Métier',
 };
 
 export interface RichardToolBadge {

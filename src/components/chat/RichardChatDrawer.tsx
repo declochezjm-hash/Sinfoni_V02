@@ -15,6 +15,8 @@ import {
 } from 'lucide-react';
 import type { UIMessage } from 'ai';
 import { useRichardChat } from '../../hooks/useRichardChat';
+import { useRole } from '../../hooks/useRole';
+import { buildProfileGuideRequest } from '../../lib/ai/profileGuides';
 import {
   getFriendlyChatErrorMessage,
   getRichardToolBadges,
@@ -22,7 +24,6 @@ import {
   isRichardQueryingDatabase,
 } from '../../lib/ai/chatUtils';
 import RichardMarkdown from './RichardMarkdown';
-import ProfileDocModal from '../docs/ProfileDocModal';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Textarea } from '../ui/textarea';
@@ -76,10 +77,10 @@ function buildConversationExport(messages: UIMessage[], timestamps: Record<strin
 }
 
 export default function RichardChatDrawer({ open, onOpenChange }: RichardChatDrawerProps) {
+  const { user } = useRole();
   const { messages, sendMessage, status, error, resetConversation, currentEntity } =
     useRichardChat();
   const [input, setInput] = useState('');
-  const [docsOpen, setDocsOpen] = useState(false);
   const [timestamps, setTimestamps] = useState<Record<string, Date>>({});
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -288,15 +289,15 @@ export default function RichardChatDrawer({ open, onOpenChange }: RichardChatDra
   };
 
   const handleDrawerOpenChange = (nextOpen: boolean) => {
-    if (!nextOpen) {
-      setDocsOpen(false);
-    }
     onOpenChange(nextOpen);
   };
 
+  const handleOpenProfileGuide = () => {
+    sendUserText(buildProfileGuideRequest(user.role));
+  };
+
   return (
-    <>
-      <Sheet open={open} onOpenChange={handleDrawerOpenChange} modal={!docsOpen}>
+    <Sheet open={open} onOpenChange={handleDrawerOpenChange}>
       <SheetContent side="right" showClose={false} className="flex flex-col p-0">
         <SheetHeader className="shrink-0 border-b border-slate-200 px-4 py-3">
           <div className="flex items-start justify-between gap-3">
@@ -362,8 +363,9 @@ export default function RichardChatDrawer({ open, onOpenChange }: RichardChatDra
 
         <button
           type="button"
-          onClick={() => setDocsOpen(true)}
-          className="flex shrink-0 items-center gap-2 border-b border-slate-200 bg-slate-50 px-4 py-2.5 text-left text-xs font-medium text-slate-700 transition-colors hover:bg-slate-100"
+          disabled={isBusy}
+          onClick={handleOpenProfileGuide}
+          className="flex shrink-0 items-center gap-2 border-b border-slate-200 bg-slate-50 px-4 py-2.5 text-left text-xs font-medium text-slate-700 transition-colors hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
         >
           <BookOpen size={14} className="shrink-0 text-slate-500" />
           Guides & Fiches Métier
@@ -453,8 +455,6 @@ export default function RichardChatDrawer({ open, onOpenChange }: RichardChatDra
           </p>
         </div>
       </SheetContent>
-      </Sheet>
-      <ProfileDocModal open={docsOpen} onOpenChange={setDocsOpen} />
-    </>
+    </Sheet>
   );
 }

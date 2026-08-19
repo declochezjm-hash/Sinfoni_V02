@@ -8,6 +8,7 @@ import {
   queryPpiMaintenanceOverview,
 } from '../../../db/readOnlyClient.ts';
 import { parseAffaireDetailsInput } from './dbContext.ts';
+import { fetchProfileGuide } from './profileGuides.ts';
 
 export interface RichardToolErrorResult {
   ok: false;
@@ -171,6 +172,31 @@ export function createRichardTools(dbContext: ReadOnlyDbContext): ToolSet {
       execute: async ({ communeInsee, filiere, exercice }) =>
         safeReadOnlyExecute('la synthèse budgétaire', async () =>
           queryBudgetSummary(dbContext, { communeInsee, filiere, exercice }),
+        ),
+    }),
+
+    getProfileGuide: tool({
+      description:
+        'Charge le guide complet et la fiche métier SINFONI (Markdown) depuis src/docs/profiles/[role].md. À appeler pour toute demande de guide, fiche métier, responsabilités détaillées par rôle, ou bouton « Guides & Fiches Métier ».',
+      inputSchema: z.object({
+        profileId: z
+          .enum(['dgs', 'dst', 'charge-affaires', 'finances', 'elu'])
+          .optional()
+          .describe('Identifiant de fiche : dgs, dst, charge-affaires, finances, elu.'),
+        role: z
+          .string()
+          .optional()
+          .describe(
+            "Rôle ou profil demandé (DGS, DST, Chargé d'Affaires, Finances, Élu…). Par défaut : rôle de l'utilisateur.",
+          ),
+      }),
+      execute: async ({ profileId, role }) =>
+        safeReadOnlyExecute('la fiche métier', async () =>
+          fetchProfileGuide({
+            profileId,
+            role,
+            userRole: dbContext.userRole,
+          }),
         ),
     }),
   };

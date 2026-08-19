@@ -28,8 +28,8 @@ import {
 import { Tabs, TabsList, TabsTrigger } from '../ui/tabs';
 
 interface ProfileDocModalProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
+  isOpen: boolean;
+  onClose: () => void;
   initialProfileId?: ProfileDocId;
 }
 
@@ -104,8 +104,8 @@ const markdownComponents: Components = {
 };
 
 export default function ProfileDocModal({
-  open,
-  onOpenChange,
+  isOpen,
+  onClose,
   initialProfileId,
 }: ProfileDocModalProps) {
   const { user } = useRole();
@@ -114,9 +114,9 @@ export default function ProfileDocModal({
   );
 
   useEffect(() => {
-    if (!open) return;
+    if (!isOpen) return;
     setProfileId(initialProfileId ?? getDefaultProfileDocId(user.role));
-  }, [open, initialProfileId, user.role]);
+  }, [isOpen, initialProfileId, user.role]);
 
   const profile = getProfileDoc(profileId);
 
@@ -126,11 +126,17 @@ export default function ProfileDocModal({
     }
   };
 
+  const handleOpenChange = (nextOpen: boolean) => {
+    if (!nextOpen) {
+      onClose();
+    }
+  };
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={isOpen} onOpenChange={handleOpenChange}>
       <DialogContent
-        overlayClassName="z-[2100]"
-        className="z-[2101] flex h-[min(90vh,880px)] w-[calc(100%-1.5rem)] max-w-4xl flex-col gap-0 overflow-hidden p-0"
+        overlayClassName="z-[2500]"
+        className="z-[2501] flex h-[min(90vh,880px)] w-[calc(100%-1.5rem)] max-w-4xl flex-col gap-0 overflow-hidden p-0"
         aria-describedby="profile-doc-description"
       >
         <DialogHeader className="shrink-0 border-b border-slate-200 px-5 py-4 pr-12">
@@ -163,7 +169,7 @@ export default function ProfileDocModal({
               <SelectTrigger className="h-9 bg-white" aria-label="Choisir un profil">
                 <SelectValue placeholder="Choisir un profil" />
               </SelectTrigger>
-              <SelectContent className="z-[2200]">
+              <SelectContent className="z-[2600]">
                 {PROFILE_DOCS.map((doc) => (
                   <SelectItem key={doc.id} value={doc.id}>
                     {doc.shortLabel} — {doc.title}

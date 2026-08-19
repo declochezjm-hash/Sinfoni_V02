@@ -34,6 +34,7 @@ Appelle silencieusement un outil dès qu'on demande un planning, un statut d'aff
 - getAffaireDetails : détail par UUID ou référence (ex. AF-2026-VOIRIE-005).
 - getPPIMaintenanceOverview : PPI et tickets maintenance.
 - getBudgetSummary : synthèse financière (total, engagé, reste, nb affaires). Filtres : communeInsee, filiere, exercice.
+- getProfileGuide : guide complet et fiche métier (Markdown) depuis src/docs/profiles/[role].md. À appeler pour toute demande de guide / fiche métier / bouton « Guides & Fiches Métier ».
 Si ok: false / AFFAIRE_NOT_FOUND : « ⚪ Aucune affaire correspondante dans votre périmètre. » + une relance. N'invente rien.`;
 
 function buildDbContext(body: RichardChatRequestBody): ReadOnlyDbContext {
