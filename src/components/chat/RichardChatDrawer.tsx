@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   AlertCircle,
+  BookOpen,
   Bot,
   Check,
   CheckCircle2,
@@ -21,6 +22,7 @@ import {
   isRichardQueryingDatabase,
 } from '../../lib/ai/chatUtils';
 import RichardMarkdown from './RichardMarkdown';
+import ProfileDocModal from '../docs/ProfileDocModal';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Textarea } from '../ui/textarea';
@@ -77,6 +79,7 @@ export default function RichardChatDrawer({ open, onOpenChange }: RichardChatDra
   const { messages, sendMessage, status, error, resetConversation, currentEntity } =
     useRichardChat();
   const [input, setInput] = useState('');
+  const [docsOpen, setDocsOpen] = useState(false);
   const [timestamps, setTimestamps] = useState<Record<string, Date>>({});
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -284,8 +287,16 @@ export default function RichardChatDrawer({ open, onOpenChange }: RichardChatDra
     );
   };
 
+  const handleDrawerOpenChange = (nextOpen: boolean) => {
+    if (!nextOpen) {
+      setDocsOpen(false);
+    }
+    onOpenChange(nextOpen);
+  };
+
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
+    <>
+      <Sheet open={open} onOpenChange={handleDrawerOpenChange} modal={!docsOpen}>
       <SheetContent side="right" showClose={false} className="flex flex-col p-0">
         <SheetHeader className="shrink-0 border-b border-slate-200 px-4 py-3">
           <div className="flex items-start justify-between gap-3">
@@ -340,7 +351,7 @@ export default function RichardChatDrawer({ open, onOpenChange }: RichardChatDra
                 variant="ghost"
                 size="icon"
                 className="h-8 w-8 text-slate-400 hover:text-slate-600"
-                onClick={() => onOpenChange(false)}
+                onClick={() => handleDrawerOpenChange(false)}
                 aria-label="Fermer"
               >
                 <X size={16} />
@@ -348,6 +359,15 @@ export default function RichardChatDrawer({ open, onOpenChange }: RichardChatDra
             </div>
           </div>
         </SheetHeader>
+
+        <button
+          type="button"
+          onClick={() => setDocsOpen(true)}
+          className="flex shrink-0 items-center gap-2 border-b border-slate-200 bg-slate-50 px-4 py-2.5 text-left text-xs font-medium text-slate-700 transition-colors hover:bg-slate-100"
+        >
+          <BookOpen size={14} className="shrink-0 text-slate-500" />
+          Guides & Fiches Métier
+        </button>
 
         <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4 min-h-0">
           {messages.length === 0 && !isThinking && (
@@ -433,6 +453,8 @@ export default function RichardChatDrawer({ open, onOpenChange }: RichardChatDra
           </p>
         </div>
       </SheetContent>
-    </Sheet>
+      </Sheet>
+      <ProfileDocModal open={docsOpen} onOpenChange={setDocsOpen} />
+    </>
   );
 }
