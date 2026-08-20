@@ -42,7 +42,7 @@ function registerRichardMiddleware(middlewares: Connect.Server, mode: string): v
   middlewares.use((req: IncomingMessage, res: ServerResponse, next: Connect.NextFunction) => {
     const url = req.url?.split('?')[0];
 
-    if (url !== RICHARD_CHAT_PATH || req.method !== 'POST') {
+    if (url !== RICHARD_CHAT_PATH || (req.method !== 'POST' && req.method !== 'DELETE')) {
       next();
       return;
     }
@@ -50,7 +50,11 @@ function registerRichardMiddleware(middlewares: Connect.Server, mode: string): v
     void (async () => {
       try {
         applyRichardEnv(mode);
-        const { POST } = await import('./api/chat/richard/route.ts');
+        const { POST, DELETE } = await import('./api/chat/richard/route.ts');
+        if (req.method === 'DELETE') {
+          await DELETE(req, res);
+          return;
+        }
         await POST(req, res);
       } catch (error) {
         if (!res.headersSent) {

@@ -730,6 +730,96 @@ export interface Database {
         };
         Relationships: NoRelationships;
       };
+      richard_sessions: {
+        Row: SinfoniEntityRow & {
+          id: string;
+          user_id: string | null;
+          title: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id: string;
+          organization_id?: string;
+          user_id?: string | null;
+          title?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          organization_id?: string;
+          user_id?: string | null;
+          title?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: NoRelationships;
+      };
+      richard_messages: {
+        Row: SinfoniEntityRow & {
+          id: string;
+          user_id: string | null;
+          session_id: string;
+          message_id: string;
+          role: string;
+          payload: Json;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          organization_id?: string;
+          user_id?: string | null;
+          session_id: string;
+          message_id: string;
+          role: string;
+          payload: Json;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          organization_id?: string;
+          user_id?: string | null;
+          session_id?: string;
+          message_id?: string;
+          role?: string;
+          payload?: Json;
+          created_at?: string;
+        };
+        Relationships: NoRelationships;
+      };
+      jarvis_messages: {
+        Row: SinfoniEntityRow & {
+          id: string;
+          user_id: string | null;
+          session_id: string;
+          message_id: string;
+          role: string;
+          payload: Json;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          organization_id?: string;
+          user_id?: string | null;
+          session_id: string;
+          message_id: string;
+          role: string;
+          payload: Json;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          organization_id?: string;
+          user_id?: string | null;
+          session_id?: string;
+          message_id?: string;
+          role?: string;
+          payload?: Json;
+          created_at?: string;
+        };
+        Relationships: NoRelationships;
+      };
     };
     Functions: {};
     Enums: {};

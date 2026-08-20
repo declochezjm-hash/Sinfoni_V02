@@ -5,6 +5,9 @@ interface RichardSession {
   agent: SDKAgent;
   initialized: boolean;
   apiKey: string;
+  sessionId: string;
+  tenantId?: string;
+  userId?: string;
 }
 
 const sessions = new Map<string, RichardSession>();
@@ -42,6 +45,8 @@ export async function getOrCreateRichardSession(options: {
   apiKey: string;
   modelId: string;
   customTools: Record<string, SDKCustomTool>;
+  tenantId?: string;
+  userId?: string;
 }): Promise<RichardSession> {
   cleanupExpiredSessions();
   touchSession(options.sessionKey);
@@ -49,6 +54,8 @@ export async function getOrCreateRichardSession(options: {
   const existing = sessions.get(options.sessionKey);
   if (existing) {
     if (existing.apiKey === options.apiKey) {
+      existing.tenantId = options.tenantId ?? existing.tenantId;
+      existing.userId = options.userId ?? existing.userId;
       return existing;
     }
     sessions.delete(options.sessionKey);
@@ -69,9 +76,21 @@ export async function getOrCreateRichardSession(options: {
     agent,
     initialized: false,
     apiKey: options.apiKey,
+    sessionId: options.sessionKey,
+    tenantId: options.tenantId,
+    userId: options.userId,
   };
   sessions.set(options.sessionKey, session);
   return session;
+}
+
+export function disposeRichardSession(sessionKey: string): void {
+  const session = sessions.get(sessionKey);
+  if (session) {
+    void disposeAgent(session.agent);
+    sessions.delete(sessionKey);
+  }
+  sessionExpiry.delete(sessionKey);
 }
 
 export function markRichardSessionInitialized(sessionKey: string): void {

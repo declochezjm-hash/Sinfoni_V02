@@ -6,26 +6,16 @@ import {
   stepCountIs,
   streamText,
   toUIMessageStream,
-  type UIMessage,
 } from 'ai';
 import { buildRichardNavigationNote, sanitizeRichardPageContext } from '../../../../src/lib/ai/pageContext.ts';
 import { buildRichardSystemPrompt } from '../../../../src/lib/ai/prompts/richardTemplate.ts';
 import { type ReadOnlyDbContext, assertReadOnlyContext } from '../../../db/readOnlyClient.ts';
 import { handleCursorRichard } from './cursorHandler.ts';
 import { buildRichardDbContext } from './dbContext.ts';
+import { deletePersistedRichardSession, persistRichardConversation } from './persist.ts';
+import { resolveRichardSessionId, type RichardChatRequestBody } from './request.ts';
 import { createRichardTools } from './tools.ts';
-
-export interface RichardChatRequestBody {
-  messages: UIMessage[];
-  userRole?: string;
-  userName?: string;
-  tenantId?: string;
-  userId?: string;
-  communeInseeCode?: string;
-  sessionKey?: string;
-  currentPath?: string;
-  currentEntity?: { type: string; id: string } | null;
-}
+import { disposeRichardSession } from './cursorSession.ts';
 
 const RICHARD_TOOLS_INSTRUCTION = `
 ## Outils (usage interne — ne jamais en parler à l'utilisateur)
@@ -88,6 +78,16 @@ async function handleOpenAiRichard(
   const navigationNote = buildRichardNavigationNote(currentPath, currentEntity);
 
   const tools = createRichardTools(dbContext);
+  const sessionId = resolveRichardSessionId(body, dbContext.tenantId);
+
+  void persistRichardConversation({
+    sessionId,
+    tenantId: dbContext.tenantId,
+    userId: body.userId,
+    messages: body.messages,
+  }).catch((error) => {
+    console.warn('[Richard] persistance OpenAI', error);
+  });
 
   const result = streamText({
     model: openai(modelId),
@@ -140,4 +140,24 @@ export async function POST(req: IncomingMessage, res: ServerResponse): Promise<v
       res.end();
     }
   }
+}
+
+/**
+ * Handler DELETE /api/chat/richard?sessionId= — dispose la session Cursor et les lignes persistées.
+ */
+export async function DELETE(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  const host = req.headers.host ?? 'localhost';
+  const url = new URL(req.url ?? '/', `http://${host}`);
+  const sessionId = url.searchParams.get('sessionId')?.trim();
+
+  if (!sessionId) {
+    sendJsonError(res, 400, 'sessionId requis.');
+    return;
+  }
+
+  disposeRichardSession(sessionId);
+  await deletePersistedRichardSession(sessionId);
+
+  res.statusCode = 204;
+  res.end();
 }

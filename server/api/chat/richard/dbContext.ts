@@ -1,5 +1,5 @@
 import type { ReadOnlyDbContext } from '../../../db/readOnlyClient.ts';
-import type { RichardChatRequestBody } from './route.ts';
+import type { RichardChatRequestBody } from './request.ts';
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

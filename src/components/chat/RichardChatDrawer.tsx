@@ -9,8 +9,14 @@ import {
   Database,
   Download,
   Loader2,
-  RotateCcw,
+  Maximize2,
+  Minimize2,
+  Minus,
+  PanelLeft,
+  PanelLeftClose,
+  Plus,
   Send,
+  Trash2,
   X,
 } from 'lucide-react';
 import type { UIMessage } from 'ai';
@@ -23,17 +29,13 @@ import {
   getUIMessageText,
   isRichardQueryingDatabase,
 } from '../../lib/ai/chatUtils';
+import { cn } from '../../lib/cn';
 import RichardMarkdown from './RichardMarkdown';
+import RichardChatFab from './RichardChatFab';
+import RichardChatSidebar from './RichardChatSidebar';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Textarea } from '../ui/textarea';
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from '../ui/sheet';
 
 interface RichardChatDrawerProps {
   open: boolean;
@@ -41,9 +43,9 @@ interface RichardChatDrawerProps {
 }
 
 const QUICK_REPLIES = [
-  { emoji: '📅', prompt: 'Planning de la journée' },
-  { emoji: '🚨', prompt: 'Urgences maintenance' },
-  { emoji: '📁', prompt: 'Affaires type électricité' },
+  { prompt: 'Planning de la journée' },
+  { prompt: 'Urgences maintenance' },
+  { prompt: 'Affaires type électricité' },
 ] as const;
 
 const COPY_FEEDBACK_MS = 1500;
@@ -78,8 +80,28 @@ function buildConversationExport(messages: UIMessage[], timestamps: Record<strin
 
 export default function RichardChatDrawer({ open, onOpenChange }: RichardChatDrawerProps) {
   const { user } = useRole();
-  const { messages, sendMessage, status, error, resetConversation, currentEntity } =
-    useRichardChat();
+  const {
+    messages,
+    sendMessage,
+    status,
+    error,
+    currentEntity,
+    currentSessionId,
+    sessions,
+    sessionsLoading,
+    isFullScreen,
+    isSidebarOpen,
+    isMinimized,
+    hasUnread,
+    startNewChat,
+    selectSession,
+    toggleFullScreen,
+    toggleSidebar,
+    deleteCurrentChat,
+    minimizeChat,
+    restoreWindow,
+    closeWindow,
+  } = useRichardChat();
   const [input, setInput] = useState('');
   const [timestamps, setTimestamps] = useState<Record<string, Date>>({});
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
@@ -91,12 +113,24 @@ export default function RichardChatDrawer({ open, onOpenChange }: RichardChatDra
   }, []);
 
   const isQueryingDatabase = isRichardQueryingDatabase(messages);
+  const panelOpen = open && !isMinimized;
 
   useEffect(() => {
-    if (open) {
-      scrollToBottom();
-    }
-  }, [open, messages, status, isQueryingDatabase, scrollToBottom]);
+    if (open) restoreWindow();
+  }, [open, restoreWindow]);
+
+  useEffect(() => {
+    if (panelOpen) scrollToBottom();
+  }, [panelOpen, messages, status, isQueryingDatabase, scrollToBottom]);
+
+  useEffect(() => {
+    if (!isFullScreen || !panelOpen) return;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = previous;
+    };
+  }, [isFullScreen, panelOpen]);
 
   useEffect(() => {
     setTimestamps((prev) => {
@@ -131,9 +165,15 @@ export default function RichardChatDrawer({ open, onOpenChange }: RichardChatDra
     };
   }, []);
 
-  const handleReset = () => {
-    resetConversation();
+  const handleNewChat = () => {
+    startNewChat();
     setTimestamps({});
+    setCopiedMessageId(null);
+    setInput('');
+  };
+
+  const handleSelectSession = (sessionId: string) => {
+    void selectSession(sessionId);
     setCopiedMessageId(null);
     setInput('');
   };
@@ -188,6 +228,28 @@ export default function RichardChatDrawer({ open, onOpenChange }: RichardChatDra
     }
   };
 
+  const handleMinimize = () => {
+    minimizeChat();
+    onOpenChange(false);
+  };
+
+  const handleClose = () => {
+    closeWindow();
+    onOpenChange(false);
+  };
+
+  const handleRestoreFromFab = () => {
+    restoreWindow();
+    onOpenChange(true);
+  };
+
+  const handleOpenProfileGuide = () => {
+    sendUserText(buildProfileGuideRequest(user.role));
+  };
+
+  const iconButtonClass =
+    'h-8 w-8 text-slate-400 hover:bg-slate-100 hover:text-slate-700 disabled:opacity-30';
+
   const renderToolBadges = (message: UIMessage) => {
     const badges = getRichardToolBadges(message);
     if (badges.length === 0) return null;
@@ -235,12 +297,12 @@ export default function RichardChatDrawer({ open, onOpenChange }: RichardChatDra
         <div
           className={`max-w-[85%] rounded-2xl px-3.5 py-2.5 ${
             isUser
-              ? 'bg-slate-900 text-white rounded-br-md'
-              : 'group bg-slate-100 text-slate-800 rounded-bl-md'
+              ? 'rounded-br-md bg-slate-900 text-white'
+              : 'group rounded-bl-md border border-slate-200/60 bg-slate-100/80 text-slate-800'
           }`}
         >
           {!isUser && (
-            <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+            <p className="mb-1 text-[10px] font-medium uppercase tracking-wide text-slate-500">
               Richard
             </p>
           )}
@@ -254,7 +316,9 @@ export default function RichardChatDrawer({ open, onOpenChange }: RichardChatDra
           {(timestamp || (!isUser && text)) && (
             <div className="mt-1 flex items-center justify-between gap-2">
               {timestamp ? (
-                <p className="text-[10px] text-slate-400">{formatMessageTime(timestamp)}</p>
+                <p className="text-[10px] text-slate-400">
+                  {formatMessageTime(timestamp)}
+                </p>
               ) : (
                 <span />
               )}
@@ -288,147 +352,84 @@ export default function RichardChatDrawer({ open, onOpenChange }: RichardChatDra
     );
   };
 
-  const handleDrawerOpenChange = (nextOpen: boolean) => {
-    onOpenChange(nextOpen);
-  };
+  const conversation = (
+    <>
+      <button
+        type="button"
+        disabled={isBusy}
+        onClick={handleOpenProfileGuide}
+        className="flex shrink-0 items-center gap-2 border-b border-slate-200/80 bg-slate-100 px-4 py-2.5 text-left text-xs font-medium text-slate-700 transition-colors hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        <BookOpen size={14} className="shrink-0 text-slate-500" />
+        Guides & Fiches Métier
+      </button>
 
-  const handleOpenProfileGuide = () => {
-    sendUserText(buildProfileGuideRequest(user.role));
-  };
-
-  return (
-    <Sheet open={open} onOpenChange={handleDrawerOpenChange}>
-      <SheetContent side="right" showClose={false} className="flex flex-col p-0">
-        <SheetHeader className="shrink-0 border-b border-slate-200 px-4 py-3">
-          <div className="flex items-start justify-between gap-3">
-            <div className="flex items-start gap-3 min-w-0">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-900 text-white">
-                <Bot size={20} />
-              </div>
-              <div className="min-w-0">
-                <SheetTitle className="text-sm font-bold text-slate-900">
-                  Richard — Assistant SINFONI
-                </SheetTitle>
-                <SheetDescription className="mt-1 flex items-center gap-1.5 text-xs">
-                  <span className="relative flex h-2 w-2">
-                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-                    <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
-                  </span>
-                  <span className="text-emerald-600 font-medium">En ligne</span>
-                </SheetDescription>
-                {currentEntity?.id && (
-                  <p className="mt-0.5 truncate text-[10px] font-normal text-slate-400" title={currentEntity.id}>
-                    Contexte : {currentEntity.id}
-                  </p>
-                )}
-              </div>
-            </div>
-            <div className="flex items-center gap-1 shrink-0">
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8 text-slate-400 hover:text-slate-600 disabled:opacity-30"
-                onClick={exportConversation}
-                disabled={messages.length === 0}
-                aria-label="Exporter la conversation"
-                title="Exporter la conversation"
-              >
-                <Download size={15} />
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8 text-slate-400 hover:text-slate-600"
-                onClick={handleReset}
-                aria-label="Réinitialiser la discussion"
-                title="Réinitialiser la discussion"
-              >
-                <RotateCcw size={15} />
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8 text-slate-400 hover:text-slate-600"
-                onClick={() => handleDrawerOpenChange(false)}
-                aria-label="Fermer"
-              >
-                <X size={16} />
-              </Button>
+      <div
+        className={cn(
+          'min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4',
+          isFullScreen && 'mx-auto w-full max-w-3xl',
+        )}
+      >
+        {messages.length === 0 && !isThinking && (
+          <div className="flex flex-col items-center justify-center py-12 text-center text-slate-400">
+            <Bot size={32} strokeWidth={1.75} className="mb-3 text-slate-300" />
+            <p className="text-sm font-medium text-slate-600">Bonjour, je suis Richard</p>
+            <p className="mt-1 max-w-[280px] text-xs">
+              Posez une question sur vos affaires, le patrimoine énergétique ou l'utilisation de
+              SINFONI.
+            </p>
+            <div className="mt-6 flex w-full max-w-[280px] flex-col gap-2">
+              {QUICK_REPLIES.map((reply) => (
+                <button
+                  key={reply.prompt}
+                  type="button"
+                  disabled={isBusy}
+                  onClick={() => sendUserText(reply.prompt)}
+                  className="rounded-lg border border-slate-200/80 bg-slate-100 p-2.5 text-left text-xs text-slate-700 transition-all hover:bg-slate-200 disabled:opacity-50"
+                >
+                  {reply.prompt}
+                </button>
+              ))}
             </div>
           </div>
-        </SheetHeader>
+        )}
 
-        <button
-          type="button"
-          disabled={isBusy}
-          onClick={handleOpenProfileGuide}
-          className="flex shrink-0 items-center gap-2 border-b border-slate-200 bg-slate-50 px-4 py-2.5 text-left text-xs font-medium text-slate-700 transition-colors hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          <BookOpen size={14} className="shrink-0 text-slate-500" />
-          Guides & Fiches Métier
-        </button>
+        {messages.map(renderMessage)}
 
-        <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4 min-h-0">
-          {messages.length === 0 && !isThinking && (
-            <div className="flex flex-col items-center justify-center py-12 text-center text-slate-400">
-              <Bot size={32} className="mb-3 text-slate-300" />
-              <p className="text-sm font-medium text-slate-600">Bonjour, je suis Richard</p>
-              <p className="mt-1 text-xs max-w-[280px]">
-                Posez une question sur vos affaires, le patrimoine énergétique ou l'utilisation de
-                SINFONI.
-              </p>
-              <div className="mt-6 flex w-full max-w-[280px] flex-col gap-2">
-                {QUICK_REPLIES.map((reply) => (
-                  <button
-                    key={reply.prompt}
-                    type="button"
-                    disabled={isBusy}
-                    onClick={() => sendUserText(reply.prompt)}
-                    className="border border-slate-200 hover:bg-slate-100 text-slate-700 text-xs rounded-lg p-2.5 transition-all text-left disabled:opacity-50"
-                  >
-                    <span className="mr-1.5" aria-hidden="true">
-                      {reply.emoji}
-                    </span>
-                    {reply.prompt}
-                  </button>
-                ))}
-              </div>
+        {isQueryingDatabase && (
+          <div className="flex justify-start">
+            <div className="flex items-center gap-2 rounded-2xl rounded-bl-md border border-slate-200/60 bg-slate-100/80 px-3.5 py-2.5 text-sm text-slate-600">
+              <Loader2 size={14} className="animate-spin text-slate-500" />
+              <span>Consultation de la base de données SINFONI…</span>
             </div>
-          )}
+          </div>
+        )}
 
-          {messages.map(renderMessage)}
-
-          {isQueryingDatabase && (
-            <div className="flex justify-start">
-              <div className="flex items-center gap-2 rounded-2xl rounded-bl-md border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-600">
-                <Loader2 size={14} className="animate-spin text-slate-500" />
-                <span>Consultation de la base de données SINFONI…</span>
-              </div>
+        {isThinking && (
+          <div className="flex justify-start">
+            <div className="flex items-center gap-2 rounded-2xl rounded-bl-md border border-slate-200/60 bg-slate-100/80 px-3.5 py-2.5 text-sm text-slate-600">
+              <Loader2 size={14} className="animate-spin text-slate-500" />
+              <span>Richard réfléchit…</span>
             </div>
-          )}
+          </div>
+        )}
 
-          {isThinking && (
-            <div className="flex justify-start">
-              <div className="flex items-center gap-2 rounded-2xl rounded-bl-md bg-slate-100 px-3.5 py-2.5 text-sm text-slate-600">
-                <Loader2 size={14} className="animate-spin text-slate-500" />
-                <span>Richard réfléchit…</span>
-              </div>
-            </div>
-          )}
+        {error && (
+          <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+            {getFriendlyChatErrorMessage(error)}
+          </div>
+        )}
 
-          {error && (
-            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
-              {getFriendlyChatErrorMessage(error)}
-            </div>
-          )}
+        <div ref={messagesEndRef} />
+      </div>
 
-          <div ref={messagesEndRef} />
-        </div>
-
-        <div className="shrink-0 border-t border-slate-200 bg-white p-4">
+      <div
+        className={cn(
+          'shrink-0 border-t border-slate-200 bg-white p-4',
+          isFullScreen && 'flex justify-center',
+        )}
+      >
+        <div className={cn(isFullScreen && 'w-full max-w-3xl')}>
           <div className="flex items-end gap-2">
             <Textarea
               value={input}
@@ -445,7 +446,7 @@ export default function RichardChatDrawer({ open, onOpenChange }: RichardChatDra
               onClick={sendUserMessage}
               disabled={!input.trim() || isBusy}
               aria-label="Envoyer"
-              className="shrink-0"
+              className="shrink-0 bg-slate-900 text-white hover:bg-slate-800"
             >
               <Send size={16} />
             </Button>
@@ -454,7 +455,173 @@ export default function RichardChatDrawer({ open, onOpenChange }: RichardChatDra
             Entrée pour envoyer · Maj+Entrée pour une nouvelle ligne
           </p>
         </div>
-      </SheetContent>
-    </Sheet>
+      </div>
+    </>
+  );
+
+  const header = (
+    <div className="flex shrink-0 items-start justify-between gap-3 border-b border-slate-200 bg-white px-4 py-3">
+      <div className="flex min-w-0 items-start gap-3">
+        {isFullScreen && (
+          <div className="flex h-10 shrink-0 items-center">
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className={iconButtonClass}
+              onClick={toggleSidebar}
+              aria-label={isSidebarOpen ? 'Masquer les conversations' : 'Afficher les conversations'}
+              title={isSidebarOpen ? 'Masquer les conversations' : 'Afficher les conversations'}
+            >
+              {isSidebarOpen ? (
+                <PanelLeftClose size={16} strokeWidth={1.75} />
+              ) : (
+                <PanelLeft size={16} strokeWidth={1.75} />
+              )}
+            </Button>
+          </div>
+        )}
+        <div
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-slate-100 text-slate-700"
+          aria-hidden="true"
+        >
+          <Bot size={20} strokeWidth={1.75} />
+        </div>
+        <div className="min-w-0">
+          <h2 className="text-sm font-medium text-slate-900">Richard — Assistant SINFONI</h2>
+          <p className="mt-1 flex items-center gap-1.5 text-xs">
+            <span className="inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+            <span className="font-medium text-slate-500">En ligne</span>
+          </p>
+          {currentEntity?.id && (
+            <p className="mt-0.5 truncate text-[10px] font-normal text-slate-400" title={currentEntity.id}>
+              Contexte : {currentEntity.id}
+            </p>
+          )}
+        </div>
+      </div>
+      <div className="flex shrink-0 items-center gap-1">
+        {!isFullScreen && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className={iconButtonClass}
+            onClick={handleNewChat}
+            aria-label="Nouveau chat"
+            title="Nouveau chat"
+          >
+            <Plus size={15} />
+          </Button>
+        )}
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className={iconButtonClass}
+          onClick={exportConversation}
+          disabled={messages.length === 0}
+          aria-label="Exporter la conversation"
+          title="Exporter la conversation"
+        >
+          <Download size={15} />
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className={iconButtonClass}
+          onClick={() => void deleteCurrentChat()}
+          aria-label="Supprimer la conversation"
+          title="Supprimer la conversation"
+        >
+          <Trash2 size={15} />
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className={iconButtonClass}
+          onClick={toggleFullScreen}
+          aria-label={isFullScreen ? 'Réduire en tiroir' : 'Plein écran'}
+          title={isFullScreen ? 'Réduire en tiroir' : 'Plein écran'}
+        >
+          {isFullScreen ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className={iconButtonClass}
+          onClick={handleMinimize}
+          aria-label="Réduire"
+          title="Réduire"
+        >
+          <Minus size={16} />
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className={iconButtonClass}
+          onClick={handleClose}
+          aria-label="Fermer"
+          title="Fermer"
+        >
+          <X size={16} />
+        </Button>
+      </div>
+    </div>
+  );
+
+  return (
+    <>
+      {isMinimized && <RichardChatFab hasUnread={hasUnread} onClick={handleRestoreFromFab} />}
+
+      {panelOpen && (
+        <div
+          role="dialog"
+          aria-modal={isFullScreen}
+          aria-label="Richard — Assistant SINFONI"
+          className={
+            isFullScreen
+              ? 'fixed inset-0 z-[2100] flex bg-slate-100'
+              : 'fixed bottom-0 right-0 top-0 z-[2100] flex w-[480px] flex-col border-l border-slate-200 bg-white shadow-2xl'
+          }
+        >
+          {isFullScreen ? (
+            <>
+              <div
+                className={cn(
+                  'h-full shrink-0 overflow-hidden transition-all duration-300 ease-in-out',
+                  isSidebarOpen ? 'w-64 opacity-100' : 'w-0 opacity-0',
+                )}
+              >
+                <RichardChatSidebar
+                  sessions={sessions}
+                  sessionsLoading={sessionsLoading}
+                  currentSessionId={currentSessionId}
+                  userName={user.name}
+                  userRole={user.role}
+                  userAvatar={user.avatar}
+                  onNewChat={handleNewChat}
+                  onSelectSession={handleSelectSession}
+                  onDeleteCurrent={() => void deleteCurrentChat()}
+                />
+              </div>
+              <div className="flex min-w-0 flex-1 flex-col bg-white">
+                {header}
+                {conversation}
+              </div>
+            </>
+          ) : (
+            <div className="flex h-full min-h-0 flex-col">
+              {header}
+              {conversation}
+            </div>
+          )}
+        </div>
+      )}
+    </>
   );
 }

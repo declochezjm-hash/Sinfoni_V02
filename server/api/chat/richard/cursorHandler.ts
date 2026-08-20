@@ -15,7 +15,8 @@ import {
   isRichardSessionInitialized,
   markRichardSessionInitialized,
 } from './cursorSession.ts';
-import type { RichardChatRequestBody } from './route.ts';
+import { persistRichardConversation } from './persist.ts';
+import { resolveRichardSessionId, type RichardChatRequestBody } from './request.ts';
 
 const RICHARD_TOOLS_INSTRUCTION = `
 ## Outils (usage interne — ne jamais en parler à l'utilisateur)
@@ -43,6 +44,22 @@ function getLastUserText(messages: UIMessage[]): string {
     if (text) return text;
   }
   throw new Error('Message utilisateur requis.');
+}
+
+function formatHistoryForCursor(messages: UIMessage[]): string {
+  const lines: string[] = [];
+  for (const message of messages) {
+    if (message.role !== 'user' && message.role !== 'assistant') continue;
+    const text = message.parts
+      .filter((part) => part.type === 'text')
+      .map((part) => part.text)
+      .join('')
+      .trim();
+    if (!text) continue;
+    const label = message.role === 'user' ? 'Utilisateur' : 'Richard';
+    lines.push(`${label}: ${text}`);
+  }
+  return lines.join('\n\n');
 }
 
 function sendJsonError(res: ServerResponse, status: number, message: string): void {
@@ -153,7 +170,7 @@ export async function handleCursorRichard(
 
     const dbContext = buildDbContext(body);
     const userText = getLastUserText(body.messages);
-    const sessionKey = body.sessionKey?.trim() || `richard-${dbContext.tenantId}`;
+    const sessionId = resolveRichardSessionId(body, dbContext.tenantId);
     const modelId = process.env.CURSOR_MODEL?.trim() || 'composer-2.5';
     const system = `${buildRichardSystemPrompt({
       userRole: body.userRole,
@@ -162,17 +179,31 @@ export async function handleCursorRichard(
     const { currentPath, currentEntity } = sanitizeRichardPageContext(body);
     const navigationNote = buildRichardNavigationNote(currentPath, currentEntity);
 
+    void persistRichardConversation({
+      sessionId,
+      tenantId: dbContext.tenantId,
+      userId: body.userId,
+      messages: body.messages,
+    }).catch((error) => {
+      console.warn('[Richard] persistance Cursor', error);
+    });
+
     const customTools = createRichardCursorCustomTools(dbContext);
     const session = await getOrCreateRichardSession({
-      sessionKey,
+      sessionKey: sessionId,
       apiKey,
       modelId,
       customTools,
+      tenantId: dbContext.tenantId,
+      userId: body.userId,
     });
 
-    const isFirstTurn = !isRichardSessionInitialized(sessionKey);
+    const isFirstTurn = !isRichardSessionInitialized(sessionId);
+    const priorHistory = formatHistoryForCursor(body.messages.slice(0, -1));
     const prompt = isFirstTurn
-      ? `[Instructions système — Richard, assistant SINFONI]\n${system}${navigationNote ? `\n\n${navigationNote}` : ''}\n\n[Utilisateur]\n${userText}`
+      ? `[Instructions système — Richard, assistant SINFONI]\n${system}${navigationNote ? `\n\n${navigationNote}` : ''}${
+          priorHistory ? `\n\n[Historique de la session ${sessionId}]\n${priorHistory}` : ''
+        }\n\n[Utilisateur]\n${userText}`
       : navigationNote
         ? `${navigationNote}\n\n${userText}`
         : userText;
@@ -268,7 +299,7 @@ export async function handleCursorRichard(
           throw new Error(result.error?.message ?? 'Erreur agent Cursor.');
         }
 
-        markRichardSessionInitialized(sessionKey);
+        markRichardSessionInitialized(sessionId);
         writer.write({ type: 'finish' });
       },
       onError: (error) => mapCursorError(error),
